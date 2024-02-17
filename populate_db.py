@@ -9,6 +9,7 @@ from selenium.common.exceptions import TimeoutException
 import warnings
 import chromedriver_autoinstaller_fix
 import pandas as pd
+import time
 
 
 def get_trading_symbols(underlying_currency):
@@ -29,8 +30,28 @@ def get_trading_symbols(underlying_currency):
             symbols = ['USDCHF']
         case 'PLN':
             symbols = ['USDPLN']
+        case 'GBP':
+            symbols = ['GBPUSD']
+        case 'SEK':
+            symbols = ['USDSEK']
+        case 'NOK':
+            symbols = ['USDNOK']
+        case 'TRY':
+            symbols = ['USDTRY']
 
-    return underlying_currency
+    return symbols
+
+
+def expand_table_until_beginning_of_data(driver, table, event_attr_id):
+    while True:
+        rows_count_start = len(table.find_elements(By.XPATH, ".//tbody/tr"))
+        driver.execute_script(f"ecEvent.moreHistory({event_attr_id}, this, 0)")  # JavaScript to expand the table
+        time.sleep(0.5)
+        rows_count_current = len(table.find_elements(By.XPATH, ".//tbody/tr"))
+        if rows_count_current == rows_count_start:
+            break
+
+    return
 
 
 def scrape_historic_indicator_data(event_attr_id):
@@ -51,6 +72,10 @@ def scrape_historic_indicator_data(event_attr_id):
     driver = webdriver.Chrome(service=service, options=options)
 
     driver.get("https://www.investing.com/economic-calendar/" + event_attr_id)
+
+    table = driver.find_element(By.ID, f"eventHistoryTable{event_attr_id}")
+    expand_table_until_beginning_of_data(driver, table, event_attr_id)
+    breakpoint()
 
 
 def extract_data_from_table(html_table):
