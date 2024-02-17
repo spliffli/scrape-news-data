@@ -10,6 +10,8 @@ import warnings
 import chromedriver_autoinstaller_fix
 import pandas as pd
 import time
+from datetime import datetime, timezone
+import pytz
 
 
 def get_trading_symbols(underlying_currency):
@@ -44,14 +46,45 @@ def get_trading_symbols(underlying_currency):
 
 def expand_table_until_beginning_of_data(driver, table, event_attr_id):
     while True:
-        rows_count_start = len(table.find_elements(By.XPATH, ".//tbody/tr"))
+        rows_count_before = len(table.find_elements(By.XPATH, ".//tbody/tr"))
         driver.execute_script(f"ecEvent.moreHistory({event_attr_id}, this, 0)")  # JavaScript to expand the table
         time.sleep(0.5)
-        rows_count_current = len(table.find_elements(By.XPATH, ".//tbody/tr"))
-        if rows_count_current == rows_count_start:
+        rows_count_after = len(table.find_elements(By.XPATH, ".//tbody/tr"))
+        if rows_count_after == rows_count_before:
             break
 
     return
+
+
+def get_datetime(release_date: str, release_time: str):
+    if ' (' in release_date:
+        release_date = release_date.split(" (")[0]
+
+    # !CAUSES CRASH
+    dt = datetime.strptime(f"{release_date} {release_time}".strip() + " -0500", "%b %d, %Y %H:%M %z")
+    return dt
+
+
+def scrape_all_table_values(driver, table):
+    df = pd.DataFrame(columns=['Date', 'Time (ET)' 'Prelim', 'Actual', 'Forecast', 'Previous'])
+    row_count = len(table.find_elements(By.XPATH, ".//tbody/tr"))
+    current_row = 0
+    for row in table.find_elements(By.XPATH, ".//tbody/tr"):
+        # print(row.find_element(By.XPATH, "./td[1]").text)
+        current_row += 1
+        print(f"scraping row {current_row}/{row_count}")
+        release_date = row.find_element(By.XPATH, "./td[1]").text
+        release_time = row.find_element(By.XPATH, "./td[2]").text
+        datetime_et = get_datetime(release_date, release_time).astimezone(pytz.timezone('US/Eastern'))
+        datetime_utc = datetime_et.astimezone(pytz.timezone('UTC'))
+        datetime_cet = datetime_et.astimezone(pytz.timezone('CET'))
+
+        if row.find_elements(By.XPATH, "./td[2]/span[@class='smallGrayP']"):
+            prelim = True
+        else:
+            prelim = False
+
+
 
 
 def scrape_historic_indicator_data(event_attr_id):
@@ -75,6 +108,7 @@ def scrape_historic_indicator_data(event_attr_id):
 
     table = driver.find_element(By.ID, f"eventHistoryTable{event_attr_id}")
     expand_table_until_beginning_of_data(driver, table, event_attr_id)
+    scrape_all_table_values(driver, table)
     breakpoint()
 
 
