@@ -137,7 +137,11 @@ def scrape_all_table_values(driver, table):
         datetime_gmt = datetime_est.astimezone(pytz.timezone('GMT'))
         datetime_cet = datetime_est.astimezone(pytz.timezone('CET'))
 
-        timestamp = datetime.isoformat(datetime_utc)
+        timestamp_seconds = datetime_utc.timestamp()
+        timestamp_nanoseconds = timestamp_seconds * 1000
+
+
+
 
         if row.find_elements(By.XPATH, "./td[2]/span[@class='smallGrayP']"):
             prelim = True
@@ -172,7 +176,7 @@ def scrape_all_table_values(driver, table):
             "datetime-cet": datetime_cet,
             "datetime-gmt": datetime_gmt,
             "datetime-est": datetime_est,
-            "timestamp": timestamp
+            "timestamp_ns": timestamp_nanoseconds
         }, ignore_index=True)
 
     print("\n")
@@ -234,7 +238,7 @@ def extract_data_from_table(html_table):
     events_list = {}
 
     for event_id in events:
-        event_title = event_id.find(class_='event').text.strip()
+        indicator_title = event_id.find(class_='event').text.strip()
         data_event_datetime = event_id['data-event-datetime']
         event_attr_id = event_id['event_attr_id']
         importance_stars = len(event_id.find_all('i', class_='grayFullBullishIcon'))
@@ -242,10 +246,10 @@ def extract_data_from_table(html_table):
         underlying_currency = event_id.find('td', class_='flagCur').text.strip()
         trading_symbols = get_trading_symbols(underlying_currency)
 
-        print(data_event_datetime + " | " + event_attr_id + " | " + event_title)
+        print(data_event_datetime + " | " + event_attr_id + " | " + indicator_title)
 
         events_list[event_attr_id] = {
-            "event-title": event_title,
+            "event-title": indicator_title,
             "data-event-datetime": data_event_datetime,
             "event-attr-id": event_attr_id,
             "importance-stars": importance_stars,
@@ -262,30 +266,43 @@ def extract_data_from_table(html_table):
 
     for event_id in unique_events:
 
-        scraped_data_df, event_title = scrape_historic_indicator_data(event_id)
+        scraped_data_df, indicator_title = scrape_historic_indicator_data(event_id)
         breakpoint()
 
         points = []
 
-        for index, row in scraped_data_df.iterrows():
-            point = (
-                Point("news_data")
-                .tag("event_attr_id", event_id)
-                .tag("event_title", event_title)
-                .field("prelim", row['prelim'])
-                .field("forecast", row['forecast'])
-                .field('actual', row['actual'])
-                .field('deviation', row['deviation'])
-                .field('previous', row['previous'])
-                .field('pushed_timestamp', datetime.utcnow().timestamp())
-                .time(row['timestamp'])
-            )
+        json_body = []
 
+        for index, row in scraped_data_df.iterrows():
+
+            json_body.append({
+                "measurement": "news_data",
+                "tags": {
+                    "event_attr_id": event_id,
+                    "indicator_title": indicator_title
+                },
+                "time": int(row['timestamp_ns']),
+                "fields": {
+                    "prelim": row['prelim'],
+                    "forecast": row['forecast'],
+                    "actual": row['actual'],
+                    "deviation": row['deviation'],
+                    "previous": row['previous'],
+                    "push_timestamp": int(datetime.utcnow().timestamp()),
+                }
+            })
+
+            response = client.write(database="News Data",
+                                    record=json_body)
+
+            """
             # Returns None for some reason & no data is written. Stepping into the code reveals it's a 204 http error
             write_http_status = client.write(database="News Data",
                                              record=point,
                                              write_precision='s',
                                              write_options=SYNCHRONOUS)
+            """
+
             breakpoint()
 
 
