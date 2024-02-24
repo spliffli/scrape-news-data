@@ -308,3 +308,5 @@ def extract_data_from_table(html_table):
 
 
 extract_data_from_table(open("./economic-calendar-table.html", encoding="utf8"))
+
+#testing testing testing
